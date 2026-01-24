@@ -1,33 +1,52 @@
 #include <Arduino.h>
-#include <Wire.h> // i2c communication
-#include "ICM20948.h" // imu driver
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
-static ICM20948 imu; // imu object, talk to sensor over i2c
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define SCREEN_ADDR 0x3C
+#define SDA 21
+#define SCL 22
 
-void print(string text);
+Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1); // oled object
 
-void setup()
+const int TRIG = 19;
+const int ECHO = 18;
+
+float readDistanceCm() 
 {
-  Serial.begin(115200);
-  delay(300);
+  digitalWrite(TRIG, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG, LOW);
 
-  print("IMU test starting");
-  Wire.being(21, 22); // starts i2c, gpio 21 = sda, gpio 22 = scl
-  imu.initialize(); //
-  if (!imu.testConnection)
-  {
-    print("IMU not found");
-    while (true); // freeze program
+  unsigned long duration = pulseIn(ECHO, HIGH, 25000UL);
+  if (duration == 0) return 9999;
+  return ((duration * 0.0343f) / 2.0f) / 2.54f; // return distance
+}
+
+void setup() {
+
+  pinMode(TRIG, OUTPUT); // sender
+  pinMode(ECHO, INPUT); // reciever
+  digitalWrite(TRIG, LOW);
+
+  Wire.begin(SDA, SCL);
+  oled.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDR);
+  oled.setTextSize(3);
+  oled.setTextColor(SSD1306_WHITE);
+  oled.clearDisplay();
+
+  while (true) {
+    float cm = readDistanceCm();
+    oled.setCursor(0, 0);
+    oled.print(cm);
+    oled.display();
+    delay(50);
+    oled.clearDisplay();
   }
-  print("IMU connected")
-}
+}   
 
-void loop()
-{
-  // ...
-}
-
-void print(string text)
-{
-  Serial.println(text);
-}
+void loop() {}
