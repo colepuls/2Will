@@ -1,52 +1,57 @@
 #include <Arduino.h>
 #include <Wire.h>
-#include <Adafruit_GFX.h>
+#include <ICM20948_WE.h>
 #include <Adafruit_SSD1306.h>
 
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-#define SCREEN_ADDR 0x3C
-#define SDA 21
-#define SCL 22
+static const int IMU_ADR = 0x68;
+static const int SDA_PIN = 21;
+static const int SCL_PIN = 22;
+static const int S_WIDTH = 128;
+static const int S_HEIGHT = 64;
+static const int OLED_ADR = 0x3C;
 
-Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1); // oled object
-
-const int TRIG = 19;
-const int ECHO = 18;
-
-float readDistanceCm() 
-{
-  digitalWrite(TRIG, LOW);
-  delayMicroseconds(2);
-  digitalWrite(TRIG, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(TRIG, LOW);
-
-  unsigned long duration = pulseIn(ECHO, HIGH, 25000UL);
-  if (duration == 0) return 9999;
-  return ((duration * 0.0343f) / 2.0f) / 2.54f; // return distance
-}
+ICM20948_WE imu = ICM20948_WE(IMU_ADR);
+Adafruit_SSD1306 oled(S_WIDTH, S_HEIGHT, &Wire, -1);
 
 void setup() {
+  Serial.begin(115200);
+  delay(1000);
 
-  pinMode(TRIG, OUTPUT); // sender
-  pinMode(ECHO, INPUT); // reciever
-  digitalWrite(TRIG, LOW);
+  Wire.begin(SDA_PIN, SCL_PIN); // sda, scl
+  Wire.setClock(400000); // faster i2c
 
-  Wire.begin(SDA, SCL);
-  oled.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDR);
-  oled.setTextSize(3);
-  oled.setTextColor(SSD1306_WHITE);
-  oled.clearDisplay();
-
-  while (true) {
-    float cm = readDistanceCm();
-    oled.setCursor(0, 0);
-    oled.print(cm);
-    oled.display();
-    delay(50);
-    oled.clearDisplay();
+  // check oled
+  if (!oled.begin(SSD1306_SWITCHCAPVCC, OLED_ADR)) {
+    while (1) {Serial.println("OLED failed"); delay(2000);}
   }
-}   
+  oled.clearDisplay();
+  oled.setTextSize(1);
+  oled.setTextColor(WHITE);
+  oled.setCursor(0, 0);
+  oled.println("OLED ready");
+  oled.display();
 
-void loop() {}
+  // check imu
+  if (!imu.init()) {
+    while (1) {Serial.println("IMU failed"); delay(2000);}
+  }
+  oled.setCursor(0, 10);
+  oled.println("IMU ready");
+  oled.display();
+}
+
+void loop() {
+  imu.readSensor(); // update
+
+  xyzFloat acc, gyr;
+  imu.getGValues(&acc);
+  imu.getGyrValues(&gyr);
+
+  oled.clearDisplay();
+  oled.setCursor(0, 0);
+  oled.printf("Ax %.2f\nAy %.2f\nAz %.2f\n", acc.x, acc.y, acc.z);
+  oled.printf("Gx %.2f\nGy %.2f\nGz %.2f\n", gyr.x, gyr.y, gyr.z);
+  oled.display();
+
+  delay(100);
+}
