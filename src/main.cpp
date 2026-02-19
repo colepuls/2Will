@@ -2,17 +2,21 @@
 #include <Wire.h>
 #include <ICM20948_WE.h>
 #include <Adafruit_SSD1306.h>
+#include <Servo.h>
 
 // PINS
 static const int AIN1_PIN = 25; // forward
 static const int AIN2_PIN = 26; // reverse
 static const int PWMA_PIN = 27; // speed
 static const int STBY_PIN = 14; // enable driver
-//static const int MC_S_A_PIN = 32;
-//static const int MC_S_B_PIN = 33;
+static const int MC1_S_A_PIN = 32;
+static const int MC1_S_B_PIN = 33;
+static const int MC2_S_A_PIN = 16; // RX2
+static const int MC2_S_B_PIN = 17; // TX2
 static const int SDA_PIN = 21;
 static const int SCL_PIN = 22;
-// Servo: 18, 19
+static const int SERVO1_PIN = 18;
+static const int SERVO2_PIN = 19;
 
 // ADDRESSES
 static const int IMU_ADR = 104;
@@ -73,7 +77,11 @@ void setup() {
     oled.println("IMU ready");
     oled.display();
 
-    // setup motor
+    // setup servos
+    Servo servo1; servo1.attach(SERVO1_PIN); servo1.write(0); delay(500);
+    Servo servo2; servo2.attach(SERVO2_PIN); servo2.write(0); delay(500);
+
+    // setup motors
     pinMode(AIN1_PIN, OUTPUT);
     pinMode(AIN2_PIN, OUTPUT);
     pinMode(STBY_PIN, OUTPUT);
@@ -81,79 +89,12 @@ void setup() {
     ledcAttachPin(PWMA_PIN, PWM_CH);
     digitalWrite(STBY_PIN, HIGH);
     motorStop();
+
+    // need to setup 2nd motor...
 }
 
 void loop() {
-/*
-  imu.readSensor();
 
-
-  xyzFloat acc, gyr;
-  imu.getGValues(&acc);
-  imu.getGyrValues(&gyr);
-
-
-  static uint32_t lastMicros = micros();
-  uint32_t now = micros();
-  float dt = (now - lastMicros) * 1e-6f;
-  lastMicros = now;
-  if (dt <= 0.0f || dt > 0.1f) dt = 0.01f;
-
-
-  float pitchAcc = atan2(acc.x, acc.z) * 180.0f / PI;
-
-  static float pitch = 0.0f;
-  float pitchRate = gyr.y;              
-
-  const float alpha = 0.98f;
-  pitch = alpha * (pitch + pitchRate * dt) + (1.0f - alpha) * pitchAcc;
-
-  float target = 0.0f;
-  float error = target - pitch;
-
-  float Kp = 20.0f;                    
-  float u = Kp * error;                 
-
-  if (fabs(pitch) > 35.0f) {
-    motorStop();
-  } else {
-    int speed = constrain((int)fabs(u), 0, 255);
-
-    if (speed < 25) {
-      motorStop();
-    } else {
-      if (u > 0) motorForward(speed);
-      else       motorReverse(speed);
-    }
-  }
-
-  oled.clearDisplay();
-  oled.setCursor(0, 0);
-
-  oled.printf("Ax %.2f Ay %.2f\n", acc.x, acc.y);
-  oled.printf("Az %.2f\n", acc.z);
-  oled.printf("Gy %.2f dt %.3f\n", pitchRate, dt);
-
-  oled.printf("pAcc %.1f\n", pitchAcc);
-  oled.printf("p %.1f\n", pitch);
-  oled.printf("err %.1f\n", error);
-  oled.printf("u %.1f\n", u);
-
-  oled.display();
-
-  delay(20);
-*/
-  motorForward(255);  // 0-255
-  delay(1000);
-
-  motorStop();
-  delay(1000);
-
-  motorReverse(255); // 0-255
-  delay(1000);
-
-  motorStop();
-  delay(1000);
 }
 
 
