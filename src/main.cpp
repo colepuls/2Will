@@ -1,100 +1,280 @@
 #include <Arduino.h>
 #include <Wire.h>
-#include <ICM20948_WE.h>
+#include <Adafruit_BNO055.h>
 #include <Adafruit_SSD1306.h>
-#include <Servo.h>
+#include <Bluepad32.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_Sensor.h>
+#include <utility/imumaths.h>
 
-// PINS
-static const int AIN1_PIN = 25; // forward
-static const int AIN2_PIN = 26; // reverse
-static const int PWMA_PIN = 27; // speed
-static const int STBY_PIN = 14; // enable driver
-static const int MC1_S_A_PIN = 32;
-static const int MC1_S_B_PIN = 33;
-static const int MC2_S_A_PIN = 16; // RX2
-static const int MC2_S_B_PIN = 17; // TX2
-static const int SDA_PIN = 21;
-static const int SCL_PIN = 22;
-static const int SERVO1_PIN = 18;
-static const int SERVO2_PIN = 19;
 
-// ADDRESSES
-static const int IMU_ADR = 104;
-static const int OLED_ADR = 60;
+// Adresses
+static const uint8_t bnoAdr = 0x28;
+static const uint8_t oledAdr = 0x3C;
 
-// PWM SETTINGS
-static const int PWM_CH = 0;
-static const int PWM_FREQ = 2000;
-static const int PWM_RES = 8; // 8-bit (0-255), speed vals
 
-ICM20948_WE imu = ICM20948_WE(IMU_ADR);
-Adafruit_SSD1306 oled(128, 64, &Wire, -1); // width, height
+// Pins
 
-// MOTOR FUNCTIONS
+// bno & oled
+static const int sdaPin = 21;
+static const int sclPin = 22;
+
+// motor controller
+static const int ain1Pin = 25; // forward
+static const int ain2Pin = 26; // reverse
+static const int pwmPin = 27;
+static const int stbyPin = 14;
+// A01 - red wire left motor 
+// A02 - black wire left motor 
+
+
+// Pwm settings
+static const int pwmCh = 0;
+static const int pwmFreq = 20000;
+static const int pwmRes = 8; // 0 - 255
+
+
+// Objects
+
+// bno
+Adafruit_BNO055 bno(55, bnoAdr);
+
+// oled
+Adafruit_SSD1306 oled(128, 64, &Wire, -1);
+
+// xbox controller
+GamepadPtr gp;
+void onConnectedGamepad(GamepadPtr g) { gp = g; }
+void onDisconnectedGamepad(GamepadPtr g) { gp = nullptr; }
+struct ControllerState {
+    // sticks
+    int16_t leftX, leftY;
+    int16_t rightX, rightY;
+
+    // triggers
+    int16_t leftTrigger;
+    int16_t rightTrigger;
+
+    // dpad
+    bool dpadUp, dpadDown, dpadLeft, dpadRight;
+
+    // buttons
+    bool a, b, x, y;
+    bool lb, rb;
+    bool thumbL, thumbR;
+    bool start, select, home;
+};
+bool readController(ControllerState &s) {
+    if (!gp || !gp->isConnected()) {
+        return false;
+    }
+
+    // sticks
+    s.leftX = gp->axisX();
+    s.leftY = gp->axisY();
+    s.rightX = gp->axisRX();
+    s.rightY = gp->axisRY();
+
+    // triggers
+    s.leftTrigger = gp->brake();
+    s.rightTrigger = gp->throttle();
+
+    // dpad
+    uint8_t dpad = gp->dpad();
+    s.dpadUp = dpad & DPAD_UP;
+    s.dpadDown = dpad & DPAD_DOWN;
+    s.dpadLeft = dpad & DPAD_LEFT;
+    s.dpadRight = dpad & DPAD_RIGHT;
+
+    // buttons
+    uint8_t btn = gp->buttons();
+    s.a = btn & BUTTON_A;
+    s.b = btn & BUTTON_B;
+    s.x = btn & BUTTON_X;
+    s.y = btn & BUTTON_Y;
+    s.lb = btn & BUTTON_SHOULDER_L;
+    s.rb = btn & BUTTON_SHOULDER_R;
+    s.thumbL = btn & BUTTON_THUMB_L;
+    s.thumbR = btn & BUTTON_THUMB_R;
+
+    // misc buttons
+    uint8_t misc = gp->miscButtons();
+    s.select = misc & MISC_BUTTON_SELECT;
+    s.start = misc & MISC_BUTTON_START;
+    s.home = misc & MISC_BUTTON_SYSTEM;
+
+    
+    return true;
+}
+ControllerState ctrl;
+
+
+// Motor
 void motorStop() {
-    digitalWrite(AIN1_PIN, LOW);
-    digitalWrite(AIN2_PIN, LOW);
-    ledcWrite(PWM_CH, 0); // set speed
+    digitalWrite(ain1Pin, LOW);
+    digitalWrite(ain2Pin, LOW);
+    ledcWrite(pwmCh, 0); // set speed
 }
-
 void motorForward(uint8_t speed) {
-    digitalWrite(AIN1_PIN, HIGH);
-    digitalWrite(AIN2_PIN, LOW);
-    ledcWrite(PWM_CH, speed); // set speed
+    digitalWrite(ain1Pin, HIGH);
+    digitalWrite(ain2Pin, LOW);
+    ledcWrite(pwmCh, speed); // set speed    
 }
-
 void motorReverse(uint8_t speed) {
-    digitalWrite(AIN1_PIN, LOW);
-    digitalWrite(AIN2_PIN, HIGH);
-    ledcWrite(PWM_CH, speed); // set speed
+    digitalWrite(ain1Pin, LOW);
+    digitalWrite(ain2Pin, HIGH);
+    ledcWrite(pwmCh, speed); // set speed    
 }
 
 void setup() {
+    // serial
     Serial.begin(115200);
-    delay(1000);
+    delay(500);
 
-    Wire.begin(SDA_PIN, SCL_PIN);
-    Wire.setClock(400000); // faster i2c
+    // i2c
+    Wire.begin(sdaPin, sclPin);
+    Wire.setClock(400000);
 
-    // check oled
-    if (!oled.begin(SSD1306_SWITCHCAPVCC, OLED_ADR)) {
-        while (1) { Serial.println("OLED failed"); delay(2000); }
+    // bno setup
+    if (!bno.begin()) {
+        Serial.println("BNO not found.\n");
+        while (true);
     }
+    bno.setExtCrystalUse(true);
+    Serial.println("BNO ready.\n");
 
+    // oled
+    if (!oled.begin(SSD1306_SWITCHCAPVCC, oledAdr)) {
+        Serial.println("OLED not found.\n");
+        while (true);
+    }
     oled.clearDisplay();
     oled.setTextSize(1);
     oled.setTextColor(WHITE);
-    oled.setCursor(0, 0);
-    oled.println("OLED ready");
-    oled.display();
+    Serial.println("OLED ready.\n");
 
-    // check imu
-    if (!imu.init()) {
-        while (1) { Serial.println("IMU failed"); delay(2000); }
-    }
-
-    oled.setCursor(0, 10);
-    oled.println("IMU ready");
-    oled.display();
-
-    // setup servos
-    Servo servo1; servo1.attach(SERVO1_PIN); servo1.write(0); delay(500);
-    Servo servo2; servo2.attach(SERVO2_PIN); servo2.write(0); delay(500);
-
-    // setup motors
-    pinMode(AIN1_PIN, OUTPUT);
-    pinMode(AIN2_PIN, OUTPUT);
-    pinMode(STBY_PIN, OUTPUT);
-    ledcSetup(PWM_CH, PWM_FREQ, PWM_RES);
-    ledcAttachPin(PWMA_PIN, PWM_CH);
-    digitalWrite(STBY_PIN, HIGH);
+    // motor
+    pinMode(ain1Pin, OUTPUT);
+    pinMode(ain2Pin, OUTPUT);
+    pinMode(stbyPin, OUTPUT);
+    ledcSetup(pwmCh, pwmFreq, pwmRes);
+    ledcAttachPin(pwmPin, pwmCh);
+    digitalWrite(stbyPin, HIGH);
     motorStop();
+    Serial.println("Motor ready.\n");
 
-    // need to setup 2nd motor...
+    // xbox controller
+    BP32.setup(&onConnectedGamepad, &onDisconnectedGamepad);
+    BP32.forgetBluetoothKeys();
 }
 
-void loop() {
 
+void loop () {
+    BP32.update();
+    bool hasCtrl = readController(ctrl);
+    bool ctrlActive = hasCtrl && (ctrl.leftTrigger  > 200 ||ctrl.rightTrigger > 200);
+
+    if (ctrlActive) {
+
+        oled.clearDisplay();
+
+        if (ctrl.leftTrigger > 200) {
+            // reverse
+            oled.setCursor(0, 0);
+            oled.println("Controller reverse.");
+            oled.display();
+            motorReverse(255);
+        }
+        
+        else if (ctrl.rightTrigger > 200) {
+            // forward
+            oled.setCursor(0, 0);
+            oled.println("Controller forward.");
+            oled.display();
+            motorForward(255);
+        }
+
+        else {
+            oled.setCursor(0, 0);
+            oled.println("Motor stop.");
+            oled.display();
+            motorStop();
+        }
+    }
+    else {
+        // imu code
+        imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
+        float pitch = euler.z();
+        Serial.printf("Pitch: %.2f\n", pitch);
+
+        oled.clearDisplay();
+
+        if (pitch <= 10 && pitch >= -10) {
+            motorStop();
+            oled.setCursor(0, 0);
+            oled.println("Motor stop.");
+            oled.display();
+            delay(50);
+        }
+        else if (pitch <= 20 && pitch > 10) {
+            oled.setCursor(0, 0);
+            oled.println("Imu forward.");
+            oled.display();
+            motorForward(100);
+            delay(50);
+        }
+        else if (pitch <= 30 && pitch > 20) {
+            oled.setCursor(0, 0);
+            oled.println("Imu forward.");
+            oled.display();
+            motorForward(150);
+            delay(50);
+        }
+        else if (pitch <= 40 && pitch > 30) {
+            oled.setCursor(0, 0);
+            oled.println("Imu forward.");
+            oled.display();
+            motorForward(200);
+            delay(50);
+        }
+        else if (pitch > 40) {
+            oled.setCursor(0, 0);
+            oled.println("Imu forward.");
+            oled.display();
+            motorForward(255);   // max speed
+            delay(50);
+        }
+        else if (pitch >= -20 && pitch < -10) {
+            oled.setCursor(0, 0);
+            oled.println("Imu reverse.");
+            oled.display();
+            motorReverse(100);
+            delay(50);
+        }
+        else if (pitch >= -30 && pitch < -20) {
+            oled.setCursor(0, 0);
+            oled.println("Imu reverse.");
+            oled.display();
+            motorReverse(150);
+            delay(50);
+        }
+        else if (pitch >= -40 && pitch < -30) {
+            oled.setCursor(0, 0);
+            oled.println("Imu reverse.");
+            oled.display();
+            motorReverse(200);
+            delay(50);
+        }
+        else if (pitch < -40) {
+            oled.setCursor(0, 0);
+            oled.println("Imu reverse.");
+            oled.display();
+            motorReverse(255);  // max speed
+            delay(50);
+        }
+    }
 }
+
+
 
 
