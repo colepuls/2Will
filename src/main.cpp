@@ -64,22 +64,34 @@ bool lastY = false;
 bool leftLegState = false;
 bool rightLegState = false;
 
-//bool posState = true; // true: stand, false: crouch
+bool posState = true; // true: stand, false: crouch
 
 // =====================================================
 //                    PID LOOP
 // =====================================================
 //
 static float standingTargetPitch = 4.85f;
-static float crouchingTargetPitch = 2.0f;
+static float crouchingTargetPitch = 1.3f;
 static float targetPitchDeg = standingTargetPitch; // starts in standing target
 
 static const float motorSign = -1.0f; // wheel spin direction
 
+static float standingKp = 38.0f;
+static float standingKd = 0.75f;
+
+static float crouchingKp = 32.0f;
+static float crouchingKd = 0.70f;
+
+
 // main tuning values
-static float balanceKp = 38.0f; // looks at error angle only, main correction strength
+static float balanceKp = standingKp; // looks at error angle only, main correction strength
 static float balanceKi = 0.0f; // long term bias
-static float balanceKd = 0.50f; // looks at how fast error is changing, smoothing, prevent overshooting, damping
+static float balanceKd = standingKd; // looks at how fast error is changing, smoothing, prevent overshooting, damping
+
+void setPidVals(float Kp, float Kd) {
+  balanceKp = Kp;
+  balanceKd = Kd;
+}
 
 // ================= MOTOR OUTPUT SHAPING =================
 static const float outDeadband = 5.0f; // ignored tiny pid outputs
@@ -320,9 +332,11 @@ void loop() {
   // ================= TARGET PITCH SWITCH =================
   if (leftLegState && rightLegState) {
     targetPitchDeg = crouchingTargetPitch;
+    setPidVals(crouchingKp, crouchingKd);
     posState = false;
   } else {
     targetPitchDeg = standingTargetPitch;
+    setPidVals(standingKp, standingKd);
     posState = true;
   }
 
