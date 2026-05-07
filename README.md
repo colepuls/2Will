@@ -10,10 +10,6 @@ The robot also includes servo-controlled legs that allow it to switch between st
 
 ## Images
 
-### CAD
-
-![CAD](images/cad.png)
-
 ### SCHEMATIC
 
 ![PCB](images/schematic.png)
@@ -22,9 +18,13 @@ The robot also includes servo-controlled legs that allow it to switch between st
 
 ![CAD](images/pcb.png)
 
-### DEMO
+### CAD
 
-[@buildsbycole](https://www.youtube.com/watch?v=8f0RlAXoa_0)
+![CAD](images/cad.png)
+
+## DEMO
+
+[link](https://www.youtube.com/shorts/AqlbXCcy0CI)
 
 ## Features
 
@@ -87,6 +87,6 @@ The robot is built and balancing. The main focus right now is tuning the PID val
 
 ## To Do
 
-- Improve push recovery with a true outer velocity loop
+- Improve push recovery with an actual outer velocity loop
 - Add cleaner calibration on startup
 - Tune movement and turning for smoother control
