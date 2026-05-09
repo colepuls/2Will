@@ -41,6 +41,12 @@ The robot balances using a PID control loop, supports standing and crouching mod
 
 ---
 
+## Demo Video
+
+A full demo of the robot balancing, standing, crouching, and driving can be viewed here:
+
+[Watch the demo on YouTube](https://www.youtube.com/shorts/skr64wKaBWc)
+
 ## Overview
 
 This project was built to explore embedded control systems, PCB design, mechanical CAD, and real-time robot balancing.
@@ -136,15 +142,18 @@ These files are included so others can build, modify, or learn from the project.
 
 ```txt
 .
-├── README.md
-├── LICENSE
-├── main.cpp
+├── builds-files/
+│   ├── parts.md
+│   ├── gerber-files/
+│   └── stl-files/
 ├── images/
 │   ├── robot.png
 │   ├── pcb.png
 │   ├── cad.png
 │   └── schematic.png
-└── build-files/
-    ├── parts-list
-    ├── gerber-files
-    └── stl-files
+├── src/
+│   └── main.cpp
+├── .gitignore
+├── LICENSE
+├── platformio.ini
+└── README.md
