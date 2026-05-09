@@ -22,10 +22,6 @@ The robot also includes servo-controlled legs that allow it to switch between st
 
 ![CAD](images/cad.png)
 
-## DEMO
-
-[link](https://www.youtube.com/shorts/AqlbXCcy0CI)
-
 ## Features
 
 - Self-balancing using PID control
@@ -66,10 +62,8 @@ The robot also includes servo-controlled legs that allow it to switch between st
 | B | Crouch |
 | X | Toggle left leg |
 | Y | Toggle right leg |
-| D-pad Left | Turn left 90 degrees |
-| D-pad Right | Turn right 90 degrees |
-| D-pad Up | Move forward slightly |
-| D-pad Down | Move backward slightly |
+| Left Stick X-axis | Turn left & right |
+| Left Stick Y-axis | Move forward & backward |
 
 ## How It Works
 

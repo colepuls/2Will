@@ -27,9 +27,9 @@ static const u16 PWMBPIN = 5;
 static const u16 STBYPIN = 14;
 
 // servo angles
-static const int slCrouch = 180;
+static const int slCrouch = 175;
 static const int slStand  = 150;
-static const int srCrouch = 10;
+static const int srCrouch = 25;
 static const int srStand  = 50;
 
 // motor pwm setup
@@ -48,114 +48,190 @@ Servo sr;
 Adafruit_BNO055 bno(bnoModel, bnoAdr);
 GamepadPtr gamepad;
 
-// controller buttons
+// controller buttons and sticks
 struct ControllerState {
   bool a, b, x, y;
-  bool dpadLeft, dpadRight;
-  bool dpadUp, dpadDown;
+  float leftX;
+  float leftY;
 };
 
 ControllerState xboxCtrl;
-
-// dpad values
-static const uint8_t DPAD_UP_MASK = 0x01;
-static const uint8_t DPAD_DOWN_MASK = 0x02;
-static const uint8_t DPAD_RIGHT_MASK = 0x04;
-static const uint8_t DPAD_LEFT_MASK = 0x08;
 
 // last button states
 bool lastA = false;
 bool lastB = false;
 bool lastX = false;
 bool lastY = false;
-bool lastDpadLeft = false;
-bool lastDpadRight = false;
-bool lastDpadUp = false;
-bool lastDpadDown = false;
 
 bool leftLegState = false;
 bool rightLegState = false;
 
 bool posState = true; // true = standing, false = crouching
 
-// balance targets
-static float standingTargetPitch = 5.00f;
-static float crouchingTargetPitch = 1.3f;
-static float targetPitchDeg = standingTargetPitch;
-
 static const float motorSign = -1.0f;
 
-// standing balance tuning
-static float standingKpNear = 40.0f;
-static float standingKpMid = 42.0f;
-static float standingKpFar = 46.0f;
+// left stick setup
+static const int stickDeadband = 60;
+static const int stickRawMax = 512;
 
-static float standingKd = 0.30f;
+// balance mode tuning
+struct BalanceTune {
+  const char* name;
 
-// crouching balance tuning
-static float crouchingKp = 34.0f;
-static float crouchingKd = 0.70f;
+  float targetPitch;
 
-// push recovery tuning
-static float standingDriftBrakeSign = 1.0f;
-static float standingDriftBrakeK = 0.025f;
-static float standingDriftBrakeMax = 1.0f;
-static float standingDriftBrakeDecay = 2.0f;
+  float kp;
+  float ki;
+  float kd;
 
-// turning tuning
-static float turnSign = 1.0f;
+  float driftBrakeSign;
+  float driftBrakeK;
+  float driftBrakeMax;
+  float driftBrakeDecay;
 
-static bool turning = false;
-static float turnTargetYaw = 0.0f;
+  float driveLeanSign;
+  float maxDriveLeanDeg;
+  float driveResponse;
 
-static float turnKp = 4.0f;
-static float maxTurnOut = 35.0f;
+  float turnSign;
+  float maxTurnOut;
+  float turnResponse;
 
-static float turnDoneDeg = 4.0f;
-static int turnDoneCount = 0;
-static const int turnDoneNeeded = 8;
+  float fallAngle;
+};
 
-// forward and backward movement
-static float driveNudgeSign = -1.0f;
-static float driveNudgeDeg = 1.2f;
-static u32 driveNudgeMs = 1000;
-static float driveNudgeDecay = 6.0f;
+// standing values
+static BalanceTune standingTune = {
+  "standing",
 
-static float driveNudgeBias = 0.0f;
-static u32 driveNudgeEndMs = 0;
+  // targetPitch:
+  4.55f,
+
+  // kp:
+  38.0f,
+
+  // ki:
+  0.0f,
+
+  // kd:
+  0.40f,
+
+  // driftBrakeSign:
+  1.0f,
+
+  // driftBrakeK:
+  0.050f,
+
+  // driftBrakeMax:
+  1.0f,
+
+  // driftBrakeDecay:
+  1.2f,
+
+  // driveLeanSign:
+  -1.0f,
+
+  // maxDriveLeanDeg:
+  4.0f,
+
+  // driveResponse:
+  13.0f,
+
+  // turnSign:
+  1.0f,
+
+  // maxTurnOut:
+  50.0f,
+
+  // turnResponse:
+  300.0f,
+
+  // fallAngle:
+  // safety cutoff
+  38.0f
+};
+
+// crouching values
+static BalanceTune crouchingTune = {
+  "crouching",
+
+  // targetPitch:
+  1.85f,
+
+  // kp:
+  34.0f,
+
+  // ki:
+  0.0f,
+
+  // kd:
+  0.40f,
+
+  // driftBrakeSign:
+  1.0f,
+
+  // driftBrakeK:
+  0.050f,
+
+  // driftBrakeMax:
+  1.0f,
+
+  // driftBrakeDecay:
+  1.0f,
+
+  // driveLeanSign:
+  -1.0f,
+
+  // maxDriveLeanDeg:
+  3.0f,
+
+  // driveResponse:
+  13.0f,
+
+  // turnSign:
+  1.0f,
+
+  // maxTurnOut:
+  50.0f,
+
+  // turnResponse:
+  300.0f,
+
+  // fallAngle:
+  // safety cutoff
+  35.0f
+};
 
 // active pid values
-static float balanceKp = standingKpFar;
+static float balanceKp = 0.0f;
 static float balanceKi = 0.0f;
-static float balanceKd = standingKd;
-
-void setPidVals(float Kp, float Kd) {
-  balanceKp = Kp;
-  balanceKd = Kd;
-}
+static float balanceKd = 0.0f;
 
 // motor output limits
 static const float outDeadband = 5.0f;
-static const int minBalancePwm = 18;
+static const int minBalancePwm = 15;
 static const int maxBalancePwm = 255;
-
-// fall cutoff
-static const float fallAngle = 38.0f;
 
 // pid memory
 static float balanceIntegral = 0.0f;
 static float balancePrevErr = 0.0f;
 
-// push recovery memory
-static float standingDriftBrakeBias = 0.0f;
+// movement memory
+static float driftBrakeBias = 0.0f;
+static float driveLeanBias = 0.0f;
+static float turnOutFiltered = 0.0f;
 static float lastMotorOut = 0.0f;
 
 // imu memory
 static float pitchFiltered = 0.0f;
+static float targetPitchDeg = 5.25f;
 
 // timing
 static u32 lastUs = 0;
 static u32 lastPrintMs = 0;
+
+// mode memory
+static bool lastCrouchingMode = false;
 
 // helper functions
 static inline float clampf(float x, float lo, float hi) {
@@ -178,47 +254,33 @@ static inline float moveTowardZero(float x, float amount) {
   return 0.0f;
 }
 
-static float wrapAngle180(float angle) {
-  while (angle > 180.0f) {
-    angle -= 360.0f;
+static inline float moveToward(float current, float target, float amount) {
+  if (current < target) {
+    current += amount;
+    if (current > target) {
+      current = target;
+    }
+  } else if (current > target) {
+    current -= amount;
+    if (current < target) {
+      current = target;
+    }
   }
 
-  while (angle < -180.0f) {
-    angle += 360.0f;
+  return current;
+}
+
+static float axisToUnit(int raw) {
+  int mag = abs(raw);
+
+  if (mag < stickDeadband) {
+    return 0.0f;
   }
 
-  return angle;
-}
+  float unit = (float)(mag - stickDeadband) / (float)(stickRawMax - stickDeadband);
+  unit = clampf(unit, 0.0f, 1.0f);
 
-static float addYawDegrees(float yaw, float addDeg) {
-  float result = yaw + addDeg;
-
-  while (result >= 360.0f) {
-    result -= 360.0f;
-  }
-
-  while (result < 0.0f) {
-    result += 360.0f;
-  }
-
-  return result;
-}
-
-static void startTurnLeft90(float currentYaw) {
-  turning = true;
-  turnDoneCount = 0;
-  turnTargetYaw = addYawDegrees(currentYaw, -90.0f);
-}
-
-static void startTurnRight90(float currentYaw) {
-  turning = true;
-  turnDoneCount = 0;
-  turnTargetYaw = addYawDegrees(currentYaw, 90.0f);
-}
-
-static void startDriveNudge(float direction) {
-  driveNudgeBias = driveNudgeSign * direction * driveNudgeDeg;
-  driveNudgeEndMs = millis() + driveNudgeMs;
+  return raw > 0 ? unit : -unit;
 }
 
 static int makeMotorPwm(float motorOut) {
@@ -238,12 +300,10 @@ static int makeMotorPwm(float motorOut) {
 static void resetPid() {
   balanceIntegral = 0.0f;
   balancePrevErr = 0.0f;
-  standingDriftBrakeBias = 0.0f;
+  driftBrakeBias = 0.0f;
+  driveLeanBias = 0.0f;
+  turnOutFiltered = 0.0f;
   lastMotorOut = 0.0f;
-  turning = false;
-  turnDoneCount = 0;
-  driveNudgeBias = 0.0f;
-  driveNudgeEndMs = 0;
 }
 
 // motor controls
@@ -317,17 +377,14 @@ bool readController(ControllerState& s) {
   }
 
   const uint8_t btn = gamepad->buttons();
-  const uint8_t dpad = gamepad->dpad();
 
   s.a = btn & BUTTON_A;
   s.b = btn & BUTTON_B;
   s.x = btn & BUTTON_X;
   s.y = btn & BUTTON_Y;
 
-  s.dpadLeft = dpad & DPAD_LEFT_MASK;
-  s.dpadRight = dpad & DPAD_RIGHT_MASK;
-  s.dpadUp = dpad & DPAD_UP_MASK;
-  s.dpadDown = dpad & DPAD_DOWN_MASK;
+  s.leftX = axisToUnit(gamepad->axisX());
+  s.leftY = axisToUnit(gamepad->axisY());
 
   return true;
 }
@@ -345,9 +402,8 @@ void setup() {
   delay(100);
 
   // start standing
-  targetPitchDeg = standingTargetPitch;
+  targetPitchDeg = standingTune.targetPitch;
   posState = true;
-
   pitchFiltered = targetPitchDeg;
   resetPid();
 
@@ -412,7 +468,10 @@ void loop() {
   pitchFiltered = 0.80f * pitchFiltered + 0.20f * rawPitch;
   float pitch = pitchFiltered;
 
-  // controller buttons
+  float driveCmd = 0.0f;
+  float turnCmd = 0.0f;
+
+  // controller buttons and sticks
   if (readController(xboxCtrl)) {
     // both crouch
     if (xboxCtrl.b && !lastB) {
@@ -420,9 +479,7 @@ void loop() {
       sr.write(srCrouch);
       leftLegState = true;
       rightLegState = true;
-      turning = false;
-      turnDoneCount = 0;
-      driveNudgeBias = 0.0f;
+      resetPid();
     }
 
     // both stand
@@ -431,123 +488,86 @@ void loop() {
       sr.write(srStand);
       leftLegState = false;
       rightLegState = false;
-      turning = false;
-      turnDoneCount = 0;
-      driveNudgeBias = 0.0f;
+      resetPid();
     }
 
     // left leg toggle
     if (xboxCtrl.x && !lastX) {
       leftLegState = !leftLegState;
       sl.write(leftLegState ? slCrouch : slStand);
-      turning = false;
-      turnDoneCount = 0;
-      driveNudgeBias = 0.0f;
+      resetPid();
     }
 
     // right leg toggle
     if (xboxCtrl.y && !lastY) {
       rightLegState = !rightLegState;
       sr.write(rightLegState ? srCrouch : srStand);
-      turning = false;
-      turnDoneCount = 0;
-      driveNudgeBias = 0.0f;
+      resetPid();
     }
 
-    // turn left
-    if (xboxCtrl.dpadLeft && !lastDpadLeft && !turning && !(leftLegState && rightLegState)) {
-      startTurnLeft90(yaw);
-    }
+    // left stick vertical:
+    // push up = forward, pull down = backward
+    driveCmd = -xboxCtrl.leftY;
 
-    // turn right
-    if (xboxCtrl.dpadRight && !lastDpadRight && !turning && !(leftLegState && rightLegState)) {
-      startTurnRight90(yaw);
-    }
-
-    // move forward a little
-    if (xboxCtrl.dpadUp && !lastDpadUp && !turning && !(leftLegState && rightLegState)) {
-      startDriveNudge(1.0f);
-    }
-
-    // move backward a little
-    if (xboxCtrl.dpadDown && !lastDpadDown && !turning && !(leftLegState && rightLegState)) {
-      startDriveNudge(-1.0f);
-    }
+    // left stick horizontal:
+    // left = turn left, right = turn right
+    turnCmd = xboxCtrl.leftX;
 
     lastA = xboxCtrl.a;
     lastB = xboxCtrl.b;
     lastX = xboxCtrl.x;
     lastY = xboxCtrl.y;
-    lastDpadLeft = xboxCtrl.dpadLeft;
-    lastDpadRight = xboxCtrl.dpadRight;
-    lastDpadUp = xboxCtrl.dpadUp;
-    lastDpadDown = xboxCtrl.dpadDown;
   } else {
+    driveCmd = 0.0f;
+    turnCmd = 0.0f;
+
     lastA = false;
     lastB = false;
     lastX = false;
     lastY = false;
-    lastDpadLeft = false;
-    lastDpadRight = false;
-    lastDpadUp = false;
-    lastDpadDown = false;
   }
 
-  // switch balance target depending on leg position
-  if (leftLegState && rightLegState) {
-    targetPitchDeg = crouchingTargetPitch;
-    setPidVals(crouchingKp, crouchingKd);
-    posState = false;
+  // crouching mode is when both legs are crouched
+  bool crouchingMode = leftLegState && rightLegState;
+  posState = !crouchingMode;
 
-    standingDriftBrakeBias = moveTowardZero(
-      standingDriftBrakeBias,
-      standingDriftBrakeDecay * dt
-    );
+  if (crouchingMode != lastCrouchingMode) {
+    resetPid();
+    lastCrouchingMode = crouchingMode;
+  }
 
-    driveNudgeBias = moveTowardZero(
-      driveNudgeBias,
-      driveNudgeDecay * dt
-    );
+  BalanceTune& tune = crouchingMode ? crouchingTune : standingTune;
+
+  balanceKp = tune.kp;
+  balanceKi = tune.ki;
+  balanceKd = tune.kd;
+
+  // push/drift recovery
+  float baseError = pitch - tune.targetPitch;
+
+  if (fabsf(lastMotorOut) > 25.0f && fabsf(baseError) < 4.0f && fabsf(driveCmd) < 0.15f) {
+    driftBrakeBias += tune.driftBrakeSign * lastMotorOut * tune.driftBrakeK * dt;
+    driftBrakeBias = clampf(driftBrakeBias, -tune.driftBrakeMax, tune.driftBrakeMax);
   } else {
-    posState = true;
-    setPidVals(standingKpFar, standingKd);
-
-    // push recovery
-    float standingErrorNoDrift = pitch - standingTargetPitch;
-
-    if (fabsf(lastMotorOut) > 25.0f && fabsf(standingErrorNoDrift) < 4.0f) {
-      standingDriftBrakeBias += standingDriftBrakeSign * lastMotorOut * standingDriftBrakeK * dt;
-      standingDriftBrakeBias = clampf(
-        standingDriftBrakeBias,
-        -standingDriftBrakeMax,
-        standingDriftBrakeMax
-      );
-    } else {
-      standingDriftBrakeBias = moveTowardZero(
-        standingDriftBrakeBias,
-        standingDriftBrakeDecay * dt
-      );
-    }
-
-    // fade movement back out
-    if ((int32_t)(millis() - driveNudgeEndMs) > 0) {
-      driveNudgeBias = moveTowardZero(
-        driveNudgeBias,
-        driveNudgeDecay * dt
-      );
-    }
-
-    targetPitchDeg = standingTargetPitch + standingDriftBrakeBias + driveNudgeBias;
+    driftBrakeBias = moveTowardZero(driftBrakeBias, tune.driftBrakeDecay * dt);
   }
+
+  // continual forward/backward movement
+  float wantedDriveLean = tune.driveLeanSign * driveCmd * tune.maxDriveLeanDeg;
+  driveLeanBias = moveToward(driveLeanBias, wantedDriveLean, tune.driveResponse * dt);
+
+  targetPitchDeg = tune.targetPitch + driftBrakeBias + driveLeanBias;
 
   // stop if it falls too far
-  if (fabsf(pitch - targetPitchDeg) > fallAngle) {
+  if (fabsf(pitch - targetPitchDeg) > tune.fallAngle) {
     stopBothMotors();
     resetPid();
 
     if (millis() - lastPrintMs > 250) {
       lastPrintMs = millis();
-      Serial.print("FALL CUTOFF | pitch=");
+      Serial.print("FALL CUTOFF | mode=");
+      Serial.print(tune.name);
+      Serial.print(" pitch=");
       Serial.print(pitch);
       Serial.print(" target=");
       Serial.println(targetPitchDeg);
@@ -559,20 +579,6 @@ void loop() {
   // main pid
   float error = pitch - targetPitchDeg;
 
-  float activeKp = balanceKp;
-
-  if (posState) {
-    float absError = fabsf(error);
-
-    if (absError < 2.0f) {
-      activeKp = standingKpNear;
-    } else if (absError < 7.0f) {
-      activeKp = standingKpMid;
-    } else {
-      activeKp = standingKpFar;
-    }
-  }
-
   balanceIntegral += error * dt;
   balanceIntegral = clampf(balanceIntegral, -20.0f, 20.0f);
 
@@ -582,7 +588,7 @@ void loop() {
   derivative = clampf(derivative, -250.0f, 250.0f);
 
   float pid =
-      (activeKp * error) +
+      (balanceKp * error) +
       (balanceKi * balanceIntegral) +
       (balanceKd * derivative);
 
@@ -591,31 +597,12 @@ void loop() {
 
   int basePwm = makeMotorPwm(motorOut);
 
-  // turning
-  float turnOut = 0.0f;
-  float yawError = 0.0f;
+  // continual left/right turning
+  float wantedTurnOut = tune.turnSign * turnCmd * tune.maxTurnOut;
+  turnOutFiltered = moveToward(turnOutFiltered, wantedTurnOut, tune.turnResponse * dt);
 
-  if (turning) {
-    yawError = wrapAngle180(turnTargetYaw - yaw);
-
-    turnOut = turnSign * turnKp * yawError;
-    turnOut = clampf(turnOut, -maxTurnOut, maxTurnOut);
-
-    if (fabsf(yawError) < turnDoneDeg) {
-      turnDoneCount++;
-    } else {
-      turnDoneCount = 0;
-    }
-
-    if (turnDoneCount >= turnDoneNeeded) {
-      turning = false;
-      turnDoneCount = 0;
-      turnOut = 0.0f;
-    }
-  }
-
-  float leftMotorOut = motorOut + turnOut;
-  float rightMotorOut = motorOut - turnOut;
+  float leftMotorOut = motorOut + turnOutFiltered;
+  float rightMotorOut = motorOut - turnOutFiltered;
 
   driveMotorSigned(0, leftMotorOut);
   driveMotorSigned(1, rightMotorOut);
@@ -624,7 +611,10 @@ void loop() {
   if (millis() - lastPrintMs > 100) {
     lastPrintMs = millis();
 
-    Serial.print("pitch=");
+    Serial.print("mode=");
+    Serial.print(tune.name);
+
+    Serial.print(" pitch=");
     Serial.print(pitch);
 
     Serial.print(" target=");
@@ -634,7 +624,7 @@ void loop() {
     Serial.print(error);
 
     Serial.print(" P=");
-    Serial.print(activeKp * error);
+    Serial.print(balanceKp * error);
 
     Serial.print(" I=");
     Serial.print(balanceKi * balanceIntegral);
@@ -649,24 +639,27 @@ void loop() {
     Serial.print(basePwm);
 
     Serial.print(" driftBias=");
-    Serial.print(standingDriftBrakeBias);
+    Serial.print(driftBrakeBias);
+
+    Serial.print(" driveCmd=");
+    Serial.print(driveCmd);
 
     Serial.print(" driveBias=");
-    Serial.print(driveNudgeBias);
+    Serial.print(driveLeanBias);
 
-    Serial.print(" yaw=");
-    Serial.print(yaw);
-
-    Serial.print(" turn=");
-    Serial.print(turning ? "on" : "off");
-
-    Serial.print(" yawErr=");
-    Serial.print(yawError);
+    Serial.print(" turnCmd=");
+    Serial.print(turnCmd);
 
     Serial.print(" turnOut=");
-    Serial.print(turnOut);
+    Serial.print(turnOutFiltered);
 
-    Serial.print(" pos=");
-    Serial.println(posState ? "standing" : "crouching");
+    Serial.print(" leftOut=");
+    Serial.print(leftMotorOut);
+
+    Serial.print(" rightOut=");
+    Serial.print(rightMotorOut);
+
+    Serial.print(" yaw=");
+    Serial.println(yaw);
   }
 }
