@@ -105,7 +105,7 @@ static BalanceTune standingTune = {
   "standing",
 
   // targetPitch:
-  4.55f,
+  4.25f,
 
   // kp:
   38.0f,
@@ -114,7 +114,7 @@ static BalanceTune standingTune = {
   0.0f,
 
   // kd:
-  0.40f,
+  0.42f,
 
   // driftBrakeSign:
   1.0f,
@@ -132,19 +132,19 @@ static BalanceTune standingTune = {
   -1.0f,
 
   // maxDriveLeanDeg:
-  4.0f,
+  5.2f,
 
   // driveResponse:
-  13.0f,
+  22.0f,
 
   // turnSign:
   1.0f,
 
   // maxTurnOut:
-  50.0f,
+  75.0f,
 
   // turnResponse:
-  300.0f,
+  325.0f,
 
   // fallAngle:
   // safety cutoff
@@ -156,16 +156,16 @@ static BalanceTune crouchingTune = {
   "crouching",
 
   // targetPitch:
-  1.85f,
+  2.15f,
 
   // kp:
-  34.0f,
+  36.0f,
 
   // ki:
   0.0f,
 
   // kd:
-  0.40f,
+  0.42f,
 
   // driftBrakeSign:
   1.0f,
@@ -183,19 +183,19 @@ static BalanceTune crouchingTune = {
   -1.0f,
 
   // maxDriveLeanDeg:
-  3.0f,
+  3.4f,
 
   // driveResponse:
-  13.0f,
+  22.0f,
 
   // turnSign:
   1.0f,
 
   // maxTurnOut:
-  50.0f,
+  75.0f,
 
   // turnResponse:
-  300.0f,
+  325.0f,
 
   // fallAngle:
   // safety cutoff
