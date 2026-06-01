@@ -45,7 +45,7 @@ The robot balances using a PID control loop, supports standing and crouching mod
 
 A full demo of the robot balancing, standing, crouching, and driving can be viewed here:
 
-[Watch the demo on YouTube](https://www.youtube.com/shorts/skr64wKaBWc)
+[Watch the demo on YouTube](https://youtu.be/T9PrHbks4U0)
 
 ## Overview
 
