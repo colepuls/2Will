@@ -1,4 +1,4 @@
-# 2Will — Self-Balancing Robot
+# 2Will — Self-Balancing Biped Robot
 
 ![Platform](https://img.shields.io/badge/platform-ESP32-blue)
 ![Framework](https://img.shields.io/badge/framework-Arduino-00979D)
@@ -15,7 +15,7 @@ The robot balances using a PID control loop, supports standing and crouching mod
 ## Project Images
 
 <p align="center">
-  <img src="images/bot.png" alt="Completed 2Will self-balancing robot" width="500">
+  <img src="images/bot.png" alt="Completed 2Will self-balancing robot" width="1000">
 </p>
 
 <p align="center">
