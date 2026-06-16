@@ -15,7 +15,7 @@ The robot balances using a PID control loop, supports standing and crouching mod
 ## Project Images
 
 <p align="center">
-  <img src="images/robot.png" alt="Completed 2Will self-balancing robot" width="500">
+  <img src="images/bot.png" alt="Completed 2Will self-balancing robot" width="500">
 </p>
 
 <p align="center">
